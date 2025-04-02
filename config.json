@@ -1,0 +1,12 @@
+[
+    {
+        "nombre_tienda": "FlashStore",
+        "url": "https://flashstore.es/categoria/reservas/?per_page=24&shop_view=grid&per_row=4",
+        "selectores": {
+            "producto": "div.wd-product.product-grid-item",
+            "nombre": "h3.wd-entities-title a",
+            "precio": ".price",
+            "enlace": "h3.wd-entities-title a"
+        }
+    }
+]
