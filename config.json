@@ -8,5 +8,15 @@
             "precio": ".price",
             "enlace": "h3.wd-entities-title a"
         }
+    },
+    {
+        "nombre_tienda": "Cardzone",
+        "url": "https://cardzone.es/collections/cartas-pokemon-tcg?filter.p.m.custom.idioma=Espa%C3%B1ol&filter.p.m.custom.idioma=Ingl%C3%A9s&filter.p.m.custom.idioma=Japon%C3%A9s&filter.v.availability=1&page=1&sort_by=created-descending",
+        "selectores": {
+        "producto": "product-card.product-card",
+        "nombre": "a.product-title",
+        "precio": "sale-price.price-text",
+        "enlace": "a.product-card__media"
+         }
     }
 ]
