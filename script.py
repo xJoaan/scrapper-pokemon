@@ -2,16 +2,97 @@ import json
 import os
 import time
 import requests
+import smtplib
+import socket
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from playwright.sync_api import sync_playwright
+from smtplib import SMTPAuthenticationError, SMTPConnectError, SMTPException
 
 CONFIG_FILE = "config.json"
 PRODUCTS_FILE = "productos.json"
 
-# Configuración de Twilio
+# Configuración de Twilio (SMS)
 TWILIO_ACCOUNT_SID = ""
 TWILIO_AUTH_TOKEN = ""
 TWILIO_FROM_NUMBER = ""
 TWILIO_TO_NUMBER = ""
+
+# Configuración de Email
+EMAIL_FROM = "tu_email@gmail.com"
+EMAIL_TO = "destinatario@gmail.com"
+EMAIL_PASSWORD = "tu_contraseña_de_aplicación"
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+
+# Configuración de Telegram
+TELEGRAM_BOT_TOKEN = ""  # Ejemplo: "123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+TELEGRAM_CHAT_ID = ""      # Ejemplo: "123456789"
+
+def enviar_telegram(mensaje):
+    """Envía un mensaje a través de Telegram."""
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": mensaje,
+            "parse_mode": "HTML"
+        }
+        
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        
+        print("✅ Mensaje enviado a Telegram con éxito.")
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Error al enviar mensaje a Telegram: {str(e)}")
+
+def enviar_email(asunto, mensaje):
+    """Envía un correo electrónico con los nuevos productos con manejo robusto de errores."""
+    try:
+        # Crear el mensaje
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_FROM
+        msg['To'] = EMAIL_TO
+        msg['Subject'] = asunto
+        
+        # Cuerpo del mensaje
+        msg.attach(MIMEText(mensaje, 'plain'))
+        
+        # Intentar enviar el correo con manejo de errores específicos
+        try:
+            print("🔌 Conectando al servidor SMTP de Gmail...")
+            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                
+                print("🔑 Autenticando...")
+                server.login(EMAIL_FROM, EMAIL_PASSWORD)
+                
+                print("📤 Enviando correo...")
+                server.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
+                print("✅ Correo electrónico enviado con éxito.")
+                
+        except SMTPAuthenticationError:
+            print("⚠️ Error de autenticación: Usuario o contraseña incorrectos.")
+            print("ℹ️ Asegúrate de usar una 'Contraseña de aplicación' si tienes 2FA activado.")
+        except SMTPConnectError:
+            print("⚠️ Error de conexión: No se pudo conectar al servidor SMTP.")
+            print("ℹ️ Verifica tu conexión a internet y los parámetros del servidor SMTP.")
+        except socket.timeout:
+            print("⚠️ Tiempo de espera agotado: El servidor no respondió a tiempo.")
+        except smtplib.SMTPSenderRefused:
+            print("⚠️ El servidor rechazó al remitente. Verifica EMAIL_FROM.")
+        except smtplib.SMTPRecipientsRefused:
+            print("⚠️ El servidor rechazó al destinatario. Verifica EMAIL_TO.")
+        except smtplib.SMTPDataError:
+            print("⚠️ Error de datos: El servidor rechazó el contenido del mensaje.")
+            print("ℹ️ Puede ser por mensaje demasiado largo o contenido no permitido.")
+        except Exception as e:
+            print(f"⚠️ Error inesperado al enviar correo: {str(e)}")
+            
+    except Exception as e:
+        print(f"⚠️ Error general al preparar el correo: {str(e)}")
 
 def enviar_sms(mensaje):
     """Envía un SMS con Twilio."""
@@ -62,6 +143,11 @@ def obtener_productos(tienda):
                 enlace = enlace_element.get_attribute("href")
                 precio = precio_element.inner_text()
                 
+                # 🔹 SOLO modificar los enlaces si la tienda es Cardzone
+                if tienda["nombre_tienda"].lower() == "cardzone" and enlace:
+                    if not enlace.startswith("http"):  
+                        enlace = f"https://cardzone.es{enlace}"  # Agregar prefijo si falta
+                
                 productos.append({
                     "nombre": nombre,
                     "enlace": enlace,
@@ -72,6 +158,7 @@ def obtener_productos(tienda):
         browser.close()
 
     return productos
+
 
 def cargar_productos_guardados():
     """Carga los productos desde productos.json si existe."""
@@ -100,12 +187,26 @@ def verificar_nuevos_productos():
     
     if nuevos_productos:
         print("✅ Nuevos productos encontrados:")
-        mensaje = "Nuevos productos:\n"
+        
+        # Mensaje para SMS/Email (texto plano)
+        mensaje_sms_email = "Nuevos productos:\n"
         for producto in nuevos_productos:
-            mensaje += f"- [{producto['tienda']}] {producto['nombre']} - {producto['precio']} - {producto['enlace']}\n"
+            mensaje_sms_email += f"- [{producto['tienda']}] {producto['nombre']} - {producto['precio']} - {producto['enlace']}\n"
 
-        # Enviar SMS
-        enviar_sms(mensaje[:1600])  # Twilio tiene un límite de 1600 caracteres
+        # Mensaje para Telegram (formato HTML) - ESTE ES EL BLOQUE QUE PREGUNTAS
+        mensaje_telegram = "🚨 <b>NUEVOS PRODUCTOS ENCONTRADOS</b> 🚨\n\n"
+        for prod in nuevos_productos:
+            mensaje_telegram += f"""
+🛍️ <b>{prod['tienda']}</b>
+📌 {prod['nombre']}
+💰 <i>{prod['precio']}</i>
+🔗 <a href="{prod['enlace']}">Ver producto</a>
+------------------------
+"""
+        # Enviar notificaciones por todos los canales
+        enviar_sms(mensaje_sms_email[:1600])  # SMS con límite de caracteres
+        enviar_email("🚨 Nuevos productos encontrados!", mensaje_sms_email)
+        enviar_telegram(mensaje_telegram)  # Telegram con formato HTML
 
         # Guardar los productos actualizados
         guardar_productos(productos_actuales)
